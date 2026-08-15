@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>每日待办 - Daily Todo</title>
+    <!-- PWA 配置 -->
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#8b5cf6">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="每日待办">
+    <link rel="apple-touch-icon" href="./icon-192.svg">
+    <link rel="icon" type="image/svg+xml" href="./icon-192.svg">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --primary: #6366f1; --primary-hover: #4f46e5;
+            --success: #10b981; --danger: #ef4444; --danger-hover: #dc2626;
+            --bg: #f8fafc; --card-bg: #ffffff;
+            --text: #1e293b; --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg); color: var(--text);
+            min-height: 100vh;
+        }
+        .desktop-only { display: block; }
+        .mobile-only { display: none; }
+        body { padding: 2rem 1rem; }
+        .container { max-width: 720px; margin: 0 auto; position: relative; }
+        .counter-card {
+            position: fixed; left: 1.5rem; top: 1.5rem; width: 320px;
+            background: var(--card-bg); border-radius: 16px; overflow: hidden;
+            box-shadow: var(--shadow-lg); min-height: 280px;
+            display: flex; flex-direction: column;
+            background-size: cover; background-position: center;
+            transition: background 0.3s; z-index: 50;
+        }
+        .counter-card .card-header {
+            background: rgba(249, 115, 22, 0.9); color: white;
+            padding: 1rem; text-align: center; font-size: 1.2rem;
+            font-weight: 600; cursor: pointer; position: relative;
+        }
+        .counter-card .card-header:hover { background: rgba(249, 115, 22, 1); }
+        .counter-card .card-header .edit-icon {
+            position: absolute; right: 12px; top: 50%;
+            transform: translateY(-50%); font-size: 0.9rem; opacity: 0.7;
+        }
+        .counter-card .card-body {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            padding: 2rem 1rem; background: rgba(255, 255, 255, 0.95);
+        }
+        .counter-card .days-number {
+            font-size: 6rem; font-weight: 700; color: #374151;
+            line-height: 1; margin-bottom: 0.5rem;
+        }
+        .counter-card .start-date { font-size: 0.9rem; color: var(--text-secondary); }
+        .counter-card .card-actions {
+            display: flex; gap: 0.5rem; padding: 1rem;
+            background: rgba(255, 255, 255, 0.95);
+            border-top: 1px solid var(--border);
+        }
+        .counter-card .card-actions button {
+            flex: 1; padding: 0.6rem; border: 1px solid var(--border);
+            border-radius: 8px; background: white; cursor: pointer;
+            font-size: 0.85rem; color: var(--text); transition: all 0.2s;
+        }
+        .counter-card .card-actions button:hover { border-color: var(--primary); color: var(--primary); }
+        .calendar-panel {
+            position: fixed; left: 1.5rem; bottom: 1.5rem; width: 320px;
+            background: var(--card-bg); border-radius: 16px;
+            box-shadow: var(--shadow-lg); z-index: 50; overflow: hidden;
+        }
+        .calendar-header {
+            padding: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; display: flex; justify-content: space-between; align-items: center;
+        }
+        .calendar-header button {
+            background: rgba(255,255,255,0.2); border: none; color: white;
+            width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 1rem;
+        }
+        .calendar-header button:hover { background: rgba(255,255,255,0.3); }
+        .calendar-header .month-year { font-weight: 600; font-size: 1rem; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding: 0.75rem; }
+        .calendar-weekday {
+            text-align: center; font-size: 0.75rem; color: var(--text-secondary);
+            padding: 0.25rem; font-weight: 500;
+        }
+        .calendar-day {
+            aspect-ratio: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            border-radius: 8px; cursor: pointer; position: relative;
+            font-size: 0.9rem; transition: all 0.2s;
+        }
+        .calendar-day:hover { background: #f1f5f9; }
+        .calendar-day.other-month { color: #cbd5e1; }
+        .calendar-day.today { background: var(--primary); color: white; font-weight: 600; }
+        .calendar-day.today:hover { background: var(--primary-hover); }
+        .calendar-day.selected { background: #e0e7ff; color: var(--primary); font-weight: 600; }
+        .calendar-day.has-schedule::after {
+            content: ''; position: absolute; bottom: 4px;
+            width: 5px; height: 5px; background: var(--danger); border-radius: 50%;
+        }
+        .calendar-day.today.has-schedule::after { background: white; }
+        .schedule-modal {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5); z-index: 1000;
+            align-items: center; justify-content: center;
+        }
+        .schedule-modal.active { display: flex; }
+        .schedule-modal-content {
+            background: white; border-radius: 16px; padding: 2rem;
+            width: 90%; max-width: 450px; max-height: 80vh;
+            overflow-y: auto; box-shadow: var(--shadow-lg);
+        }
+        .schedule-modal-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;
+        }
+        .schedule-modal-header h3 { font-size: 1.2rem; color: var(--text); }
+        .schedule-modal-header .close-btn {
+            width: 32px; height: 32px; border: none; background: var(--border);
+            border-radius: 8px; cursor: pointer; font-size: 1.2rem; color: var(--text);
+        }
+        .schedule-modal-header .close-btn:hover { background: #cbd5e1; }
+        .schedule-list { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; }
+        .schedule-item {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.75rem; background: #f8fafc; border-radius: 8px;
+            border-left: 3px solid var(--primary);
+        }
+        .schedule-item .time { font-size: 0.85rem; font-weight: 600; color: var(--primary); min-width: 50px; }
+        .schedule-item .title { flex: 1; font-size: 0.9rem; color: var(--text); }
+        .schedule-item .delete-btn {
+            width: 24px; height: 24px; border: none; background: transparent;
+            color: var(--text-secondary); cursor: pointer; border-radius: 4px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .schedule-item .delete-btn:hover { background: #fee2e2; color: var(--danger); }
+        .schedule-empty { text-align: center; padding: 2rem 1rem; color: var(--text-secondary); font-size: 0.9rem; }
+        .schedule-add-form { display: flex; gap: 0.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+        .schedule-add-form input[type="time"] {
+            width: 100px; padding: 0.5rem; border: 1px solid var(--border);
+            border-radius: 6px; font-size: 0.85rem;
+        }
+        .schedule-add-form input[type="text"] {
+            flex: 1; padding: 0.5rem; border: 1px solid var(--border);
+            border-radius: 6px; font-size: 0.85rem;
+        }
+        .schedule-add-form input:focus { outline: none; border-color: var(--primary); }
+        .schedule-add-form button {
+            padding: 0.5rem 1rem; background: var(--primary); color: white;
+            border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+        }
+        .schedule-add-form button:hover { background: var(--primary-hover); }
+        .todo-section { max-width: 680px; }
+        .date-nav {
+            display: flex; align-items: center; justify-content: center;
+            gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap;
+        }
+        .date-nav button {
+            padding: 0.4rem 0.8rem; border: 1px solid var(--border);
+            border-radius: 8px; background: var(--card-bg); cursor: pointer;
+            font-size: 0.85rem; color: var(--text); transition: all 0.2s; box-shadow: var(--shadow);
+        }
+        .date-nav button:hover { border-color: var(--primary); color: var(--primary); }
+        .date-nav button.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .date-nav .date-display {
+            font-size: 1rem; font-weight: 600; color: var(--text);
+            min-width: 140px; text-align: center;
+        }
+        .date-nav input[type="date"] {
+            padding: 0.4rem 0.6rem; border: 1px solid var(--border);
+            border-radius: 8px; font-size: 0.85rem; color: var(--text);
+            background: var(--card-bg); cursor: pointer; box-shadow: var(--shadow);
+        }
+        .date-nav input[type="date"]:focus { outline: none; border-color: var(--primary); }
+        .header { text-align: center; margin-bottom: 1.5rem; }
+        .header h1 { font-size: 2rem; font-weight: 700; color: var(--primary); margin-bottom: 0.3rem; }
+        .header .subtitle { font-size: 0.9rem; color: var(--text-secondary); }
+        .stats-bar { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
+        .stat-card {
+            flex: 1; background: var(--card-bg); border-radius: 12px;
+            padding: 1rem; text-align: center; box-shadow: var(--shadow);
+        }
+        .stat-card .number { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
+        .stat-card .label { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem; }
+        .stat-card.completed .number { color: var(--success); }
+        .stat-card.pending .number { color: #f59e0b; }
+        .progress-container {
+            background: var(--card-bg); border-radius: 12px;
+            padding: 1rem 1.5rem; margin-bottom: 1.5rem; box-shadow: var(--shadow);
+        }
+        .progress-header {
+            display: flex; justify-content: space-between;
+            margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--text-secondary);
+        }
+        .progress-bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+        .progress-fill {
+            height: 100%; background: linear-gradient(90deg, var(--primary), var(--success));
+            border-radius: 4px; transition: width 0.5s ease;
+        }
+        .input-section {
+            background: var(--card-bg); border-radius: 12px;
+            padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: var(--shadow);
+        }
+        .input-section h2 { font-size: 1.1rem; margin-bottom: 1rem; color: var(--text); }
+        .input-group { display: flex; flex-direction: column; gap: 0.75rem; }
+        textarea {
+            width: 100%; min-height: 100px; padding: 0.75rem 1rem;
+            border: 2px solid var(--border); border-radius: 8px;
+            font-size: 0.95rem; font-family: inherit; resize: vertical;
+            transition: border-color 0.2s; line-height: 1.6;
+        }
+        textarea:focus { outline: none; border-color: var(--primary); }
+        .add-btn {
+            padding: 0.75rem 1.5rem; background: var(--primary); color: white;
+            border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 500;
+            cursor: pointer; transition: background 0.2s; align-self: flex-end;
+        }
+        .add-btn:hover { background: var(--primary-hover); }
+        .task-list { display: flex; flex-direction: column; gap: 0.75rem; }
+        .task-item {
+            background: var(--card-bg); border-radius: 12px;
+            padding: 1rem 1.25rem; display: flex; align-items: center; gap: 1rem;
+            box-shadow: var(--shadow); transition: all 0.2s;
+        }
+        .task-item:hover { box-shadow: var(--shadow-lg); }
+        .task-item.completed { opacity: 0.7; }
+        .task-item.completed .task-text { text-decoration: line-through; color: var(--text-secondary); }
+        .task-checkbox {
+            width: 24px; height: 24px; border-radius: 50%;
+            border: 2px solid var(--border); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s; flex-shrink: 0;
+        }
+        .task-checkbox:hover { border-color: var(--success); }
+        .task-item.completed .task-checkbox { background: var(--success); border-color: var(--success); }
+        .task-checkbox::after { content: '✓'; color: white; font-size: 0.8rem; display: none; }
+        .task-item.completed .task-checkbox::after { display: block; }
+        .task-text { flex: 1; font-size: 0.95rem; line-height: 1.5; }
+        .task-delete {
+            width: 28px; height: 28px; border-radius: 6px;
+            border: none; background: transparent; color: var(--text-secondary);
+            cursor: pointer; font-size: 1.1rem; transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .task-delete:hover { background: #fee2e2; color: var(--danger); }
+        .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-secondary); }
+        .empty-state .icon { font-size: 3rem; margin-bottom: 1rem; }
+        .empty-state .text { font-size: 1rem; }
+        .tips-panel {
+            position: fixed; top: 1.5rem; right: 1.5rem; bottom: 1.5rem; width: 380px;
+            background: var(--card-bg); border-radius: 16px;
+            box-shadow: var(--shadow-lg); z-index: 100;
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        .tips-header {
+            padding: 1rem 1.25rem; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white; font-weight: 600; font-size: 1.1rem;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .tips-header button {
+            background: rgba(255,255,255,0.2); border: none; color: white;
+            padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+        }
+        .tips-header button:hover { background: rgba(255,255,255,0.3); }
+        .tips-content {
+            flex: 1; overflow-y: auto; padding: 1rem;
+            display: flex; flex-direction: column; gap: 0.75rem;
+        }
+        .tip-item {
+            padding: 1rem; border-radius: 12px; font-size: 0.95rem;
+            line-height: 1.6; position: relative; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .tip-item:nth-child(6n+1) { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); color: #831843; }
+        .tip-item:nth-child(6n+2) { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #1e40af; }
+        .tip-item:nth-child(6n+3) { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); color: #92400e; }
+        .tip-item:nth-child(6n+4) { background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); color: #1e3a8a; }
+        .tip-item:nth-child(6n+5) { background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%); color: #14532d; }
+        .tip-item:nth-child(6n+6) { background: linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%); color: #5b21b6; }
+        .tip-item .tip-delete {
+            position: absolute; top: 0.5rem; right: 0.5rem;
+            width: 24px; height: 24px; border: none;
+            background: rgba(255,255,255,0.5); border-radius: 50%;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            font-size: 0.9rem; color: inherit; opacity: 0; transition: opacity 0.2s;
+        }
+        .tip-item:hover .tip-delete { opacity: 1; }
+        .tip-item .tip-delete:hover { background: rgba(255,255,255,0.8); }
+        .tips-add { padding: 1rem; border-top: 1px solid var(--border); display: flex; gap: 0.5rem; }
+        .tips-add input {
+            flex: 1; padding: 0.75rem; border: 2px solid var(--border);
+            border-radius: 8px; font-size: 0.9rem;
+        }
+        .tips-add input:focus { outline: none; border-color: var(--primary); }
+        .tips-add button {
+            padding: 0.75rem 1.25rem; background: var(--primary); color: white;
+            border: none; border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: 500;
+        }
+        .tips-add button:hover { background: var(--primary-hover); }
+        .tips-empty { text-align: center; padding: 3rem 1rem; color: var(--text-secondary); font-size: 0.9rem; }
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5); z-index: 1000;
+            align-items: center; justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: white; border-radius: 16px; padding: 2rem;
+            width: 90%; max-width: 400px; box-shadow: var(--shadow-lg);
+        }
+        .modal h3 { font-size: 1.2rem; margin-bottom: 1.5rem; color: var(--text); }
+        .modal .form-group { margin-bottom: 1.25rem; }
+        .modal label { display: block; font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem; }
+        .modal input, .modal textarea {
+            width: 100%; padding: 0.75rem; border: 2px solid var(--border);
+            border-radius: 8px; font-size: 0.95rem; font-family: inherit;
+        }
+        .modal input:focus, .modal textarea:focus { outline: none; border-color: var(--primary); }
+        .modal .btn-group { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
+        .modal button {
+            flex: 1; padding: 0.75rem; border: none; border-radius: 8px;
+            cursor: pointer; font-size: 0.95rem; font-weight: 500;
+        }
+        .modal .btn-primary { background: var(--primary); color: white; }
+        .modal .btn-primary:hover { background: var(--primary-hover); }
+        .modal .btn-secondary { background: var(--border); color: var(--text); }
+        .modal .btn-secondary:hover { background: #cbd5e1; }
+        @media (max-width: 1400px) {
+            .counter-card { display: none; }
+            .calendar-panel { display: none; }
+            .tips-panel { width: 320px; }
+        }
+        @media (max-width: 600px) {
+            .tips-panel { width: 280px; right: 0.5rem; }
+            .container { padding: 0 0.5rem; }
+        }
+        /* 手机版样式 */
+        .mobile-only { display: none; }
+        @media (max-width: 768px) {
+            .desktop-only { display: none !important; }
+            .mobile-only { display: block !important; }
+            body { padding: 0; background: #f0f2f5; }
+            .mobile-header {
+                position: fixed; top: 0; left: 0; right: 0; height: 56px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white; display: flex; align-items: center;
+                padding: 0 1rem; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+            .mobile-header .menu-btn {
+                width: 40px; height: 40px; border: none; background: rgba(255,255,255,0.2);
+                border-radius: 8px; color: white; font-size: 1.3rem; cursor: pointer;
+            }
+            .mobile-header .title { flex: 1; text-align: center; font-size: 1.1rem; font-weight: 600; }
+            .mobile-header .notify-btn {
+                width: 40px; height: 40px; border: none; background: rgba(255,255,255,0.2);
+                border-radius: 8px; color: white; font-size: 1.2rem; cursor: pointer;
+            }
+            .mobile-main { padding-top: 56px; min-height: 100vh; }
+            .mobile-date-nav {
+                display: flex; align-items: center; justify-content: center;
+                gap: 0.5rem; padding: 1rem; background: white; margin-bottom: 0.5rem;
+            }
+            .mobile-date-nav button {
+                width: 36px; height: 36px; border: 1px solid var(--border);
+                border-radius: 8px; background: white; cursor: pointer; font-size: 1rem;
+            }
+            .mobile-date-nav .date-text { font-size: 0.95rem; font-weight: 600; color: var(--text); min-width: 120px; text-align: center; }
+            .mobile-stats { display: flex; gap: 0.5rem; padding: 0 1rem; margin-bottom: 0.5rem; }
+            .mobile-stat {
+                flex: 1; background: white; border-radius: 10px; padding: 0.75rem;
+                text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            }
+            .mobile-stat .num { font-size: 1.5rem; font-weight: 700; color: var(--primary); }
+            .mobile-stat .lbl { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.2rem; }
+            .mobile-task-input {
+                background: white; border-radius: 12px; padding: 1rem;
+                margin: 0 1rem 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            }
+            .mobile-task-input textarea {
+                width: 100%; min-height: 80px; padding: 0.75rem;
+                border: 2px solid var(--border); border-radius: 8px;
+                font-size: 0.9rem; font-family: inherit; resize: vertical;
+            }
+            .mobile-task-input textarea:focus { outline: none; border-color: var(--primary); }
+            .mobile-task-input .add-btn {
+                margin-top: 0.75rem; width: 100%; padding: 0.75rem;
+                background: var(--primary); color: white; border: none;
+                border-radius: 8px; font-size: 0.95rem; font-weight: 500; cursor: pointer;
+            }
+            .mobile-task-item {
+                background: white; border-radius: 10px; padding: 0.75rem 1rem;
+                display: flex; align-items: center; gap: 0.75rem;
+                margin: 0 1rem 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            }
+            .mobile-task-item.completed { opacity: 0.7; }
+            .mobile-task-item.completed .mobile-task-text { text-decoration: line-through; color: var(--text-secondary); }
+            .mobile-task-checkbox {
+                width: 22px; height: 22px; border-radius: 50%;
+                border: 2px solid var(--border); cursor: pointer;
+                display: flex; align-items: center; justify-content: center;
+                flex-shrink: 0;
+            }
+            .mobile-task-item.completed .mobile-task-checkbox { background: var(--success); border-color: var(--success); }
+            .mobile-task-checkbox::after { content: '✓'; color: white; font-size: 0.75rem; display: none; }
+            .mobile-task-item.completed .mobile-task-checkbox::after { display: block; }
+            .mobile-task-text { flex: 1; font-size: 0.9rem; line-height: 1.4; }
+            .mobile-task-delete {
+                width: 26px; height: 26px; border: none; background: transparent;
+                color: var(--text-secondary); cursor: pointer; font-size: 1rem;
+                display: flex; align-items: center; justify-content: center;
+            }
+            .mobile-task-delete:hover { color: var(--danger); }
+            .mobile-empty { text-align: center; padding: 2rem 1rem; color: var(--text-secondary); font-size: 0.9rem; }
+            /* 侧边栏 */
+            .mobile-sidebar {
+                position: fixed; top: 0; left: -280px; width: 280px; height: 100%;
+                background: white; z-index: 200; transition: left 0.3s ease;
+                box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+            }
+            .mobile-sidebar.open { left: 0; }
+            .sidebar-overlay {
+                position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.5); z-index: 150; opacity: 0;
+                pointer-events: none; transition: opacity 0.3s;
+            }
+            .sidebar-overlay.show { opacity: 1; pointer-events: auto; }
+            .sidebar-header {
+                padding: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white; display: flex; justify-content: space-between; align-items: center;
+            }
+            .sidebar-header .close-btn {
+                width: 32px; height: 32px; border: none; background: rgba(255,255,255,0.2);
+                border-radius: 6px; color: white; font-size: 1.2rem; cursor: pointer;
+            }
+            .sidebar-menu { padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+            .sidebar-menu-item {
+                display: flex; align-items: center; gap: 0.75rem;
+                padding: 1rem; border: none; background: #f8fafc;
+                border-radius: 10px; cursor: pointer; font-size: 0.95rem;
+                color: var(--text); transition: all 0.2s;
+            }
+            .sidebar-menu-item:hover { background: #e0e7ff; }
+            .sidebar-menu-item .icon { font-size: 1.3rem; }
+            .sidebar-menu-item .label { flex: 1; text-align: left; font-weight: 500; }
+            .sidebar-menu-item .badge {
+                background: var(--danger); color: white; font-size: 0.75rem;
+                padding: 0.2rem 0.5rem; border-radius: 10px; font-weight: 600;
+            }
+            /* 抽屉面板 */
+            .mobile-drawer {
+                position: fixed; top: 0; left: -100%; width: 85%; max-width: 360px;
+                height: 100%; background: white; z-index: 250;
+                transition: left 0.3s ease; display: flex; flex-direction: column;
+            }
+            .mobile-drawer.open { left: 0; }
+            .drawer-overlay {
+                position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.5); z-index: 240; opacity: 0;
+                pointer-events: none; transition: opacity 0.3s;
+            }
+            .drawer-overlay.show { opacity: 1; pointer-events: auto; }
+            .drawer-header {
+                padding: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white; display: flex; justify-content: space-between; align-items: center;
+            }
+            .drawer-header .close-btn {
+                width: 32px; height: 32px; border: none; background: rgba(255,255,255,0.2);
+                border-radius: 6px; color: white; font-size: 1.2rem; cursor: pointer;
+            }
+            .drawer-content { flex: 1; overflow-y: auto; padding: 1rem; }
+            /* 手机版计时卡片 */
+            .mobile-counter {
+                border-radius: 16px; overflow: hidden; min-height: 240px;
+                display: flex; flex-direction: column; background-size: cover;
+                background-position: center;
+            }
+            .mc-header {
+                background: rgba(249, 115, 22, 0.9); color: white;
+                padding: 1rem; text-align: center; font-size: 1.1rem; font-weight: 600;
+            }
+            .mc-body {
+                flex: 1; display: flex; flex-direction: column;
+                align-items: center; justify-content: center;
+                padding: 2rem 1rem; background: rgba(255,255,255,0.95);
+            }
+            .mc-days { font-size: 5rem; font-weight: 700; color: #374151; line-height: 1; }
+            .mc-date { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; }
+            .mc-actions {
+                display: flex; gap: 0.5rem; padding: 1rem;
+                background: rgba(255,255,255,0.95); border-top: 1px solid var(--border);
+            }
+            .mc-actions button {
+                flex: 1; padding: 0.6rem; border: 1px solid var(--border);
+                border-radius: 8px; background: white; cursor: pointer; font-size: 0.85rem;
+            }
+            /* 手机版日历 */
+            .mobile-calendar { background: white; border-radius: 12px; overflow: hidden; }
+            .mobile-calendar-header {
+                display: flex; justify-content: space-between; align-items: center;
+                padding: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+            .mobile-calendar-header button {
+                width: 32px; height: 32px; border: none; background: rgba(255,255,255,0.2);
+                border-radius: 6px; color: white; cursor: pointer; font-size: 1rem;
+            }
+            .mobile-calendar-header .month-text { font-weight: 600; font-size: 1rem; }
+            .mobile-calendar-grid {
+                display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding: 0.75rem;
+            }
+            .mobile-calendar-day {
+                aspect-ratio: 1; display: flex; flex-direction: column;
+                align-items: center; justify-content: center;
+                border-radius: 8px; cursor: pointer; position: relative;
+                font-size: 0.85rem; transition: all 0.2s;
+            }
+            .mobile-calendar-day:hover { background: #f1f5f9; }
+            .mobile-calendar-day.other-month { color: #cbd5e1; }
+            .mobile-calendar-day.today { background: var(--primary); color: white; font-weight: 600; }
+            .mobile-calendar-day.has-schedule::after {
+                content: ''; position: absolute; bottom: 3px;
+                width: 4px; height: 4px; background: var(--danger); border-radius: 50%;
+            }
+            .mobile-calendar-day.today.has-schedule::after { background: white; }
+            /* 手机版 Tips */
+            .mobile-tips-content { display: flex; flex-direction: column; gap: 0.75rem; }
+            .mobile-tip-item {
+                padding: 1rem; border-radius: 12px; font-size: 0.9rem;
+                line-height: 1.6; position: relative;
+            }
+            .mobile-tip-item:nth-child(6n+1) { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); color: #831843; }
+            .mobile-tip-item:nth-child(6n+2) { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #1e40af; }
+            .mobile-tip-item:nth-child(6n+3) { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); color: #92400e; }
+            .mobile-tip-item:nth-child(6n+4) { background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); color: #1e3a8a; }
+            .mobile-tip-item:nth-child(6n+5) { background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%); color: #14532d; }
+            .mobile-tip-item:nth-child(6n+6) { background: linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%); color: #5b21b6; }
+            .mobile-tip-item .tip-delete {
+                position: absolute; top: 0.5rem; right: 0.5rem;
+                width: 24px; height: 24px; border: none;
+                background: rgba(255,255,255,0.5); border-radius: 50%;
+                cursor: pointer; display: flex; align-items: center; justify-content: center;
+                font-size: 0.9rem;
+            }
+            .mobile-tips-add {
+                display: flex; gap: 0.5rem; padding: 1rem;
+                border-top: 1px solid var(--border); background: white;
+            }
+            .mobile-tips-add input {
+                flex: 1; padding: 0.75rem; border: 2px solid var(--border);
+                border-radius: 8px; font-size: 0.9rem;
+            }
+            .mobile-tips-add input:focus { outline: none; border-color: var(--primary); }
+            .mobile-tips-add button {
+                padding: 0.75rem 1.25rem; background: var(--primary); color: white;
+                border: none; border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: 500;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="desktop-only">
+        <div class="counter-card" id="counterCard">
+            <div class="card-header" onclick="openEditModal()">
+                <span id="counterTitle">努力上班第</span>
+                <span class="edit-icon">✏️</span>
+            </div>
+            <div class="card-body">
+                <div class="days-number" id="daysNumber">0</div>
+                <div class="start-date" id="startDate">起始日：2024-01-01</div>
+            </div>
+            <div class="card-actions">
+                <button onclick="openEditModal()">✏️ 编辑</button>
+                <button onclick="openBgModal()">️ 背景</button>
+            </div>
+        </div>
+        <div class="calendar-panel" id="calendarPanel">
+            <div class="calendar-header">
+                <button onclick="changeMonth(-1)">◀</button>
+                <span class="month-year" id="monthYear"></span>
+                <button onclick="changeMonth(1)">▶</button>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
+        </div>
+        <div class="container">
+            <div class="todo-section">
+                <div class="date-nav">
+                    <button onclick="changeDate(-1)">◀ 前一天</button>
+                    <input type="date" id="datePicker" onchange="selectDate(this.value)">
+                    <button onclick="goToday()" class="active"> 今天</button>
+                    <button onclick="changeDate(1)">后一天 ▶</button>
+                    <span class="date-display" id="dateDisplay"></span>
+                </div>
+                <div class="header">
+                    <h1>📋 每日待办</h1>
+                    <p class="subtitle">规划每一天，完成每一事</p>
+                </div>
+                <div class="stats-bar">
+                    <div class="stat-card"><div class="number" id="totalCount">0</div><div class="label">全部任务</div></div>
+                    <div class="stat-card completed"><div class="number" id="completedCount">0</div><div class="label">已完成</div></div>
+                    <div class="stat-card pending"><div class="number" id="pendingCount">0</div><div class="label">待完成</div></div>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-header"><span>完成进度</span><span id="progressText">0%</span></div>
+                    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+                </div>
+                <div class="input-section" id="inputSection">
+                    <h2>➕ 添加新任务</h2>
+                    <div class="input-group">
+                        <textarea id="taskInput" placeholder="输入任务，每行一个任务...&#10;例如：&#10;完成项目报告&#10;回复客户邮件&#10;准备下午会议"></textarea>
+                        <button class="add-btn" onclick="addTasks()">添加任务</button>
+                    </div>
+                </div>
+                <div class="task-list" id="taskList"></div>
+            </div>
+        </div>
+        <div class="tips-panel" id="tipsPanel">
+            <div class="tips-header">
+                <span>💡 Tips 提醒</span>
+                <button onclick="clearAllTips()">🗑️ 清空全部</button>
+            </div>
+            <div class="tips-content" id="tipsContent"></div>
+            <div class="tips-add">
+                <input type="text" id="tipInput" placeholder="输入新的提醒...">
+                <button onclick="addTip()">添加</button>
+            </div>
+        </div>
+    </div>
+    <div class="mobile-only">
+        <div class="mobile-header">
+            <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+            <div class="title"> 每日待办</div>
+            <button class="notify-btn" onclick="requestNotification()"></button>
+        </div>
+        <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+        <div class="mobile-sidebar" id="mobileSidebar">
+            <div class="sidebar-header">
+                <span>📱 功能菜单</span>
+                <button class="close-btn" onclick="toggleSidebar()">×</button>
+            </div>
+            <div class="sidebar-menu">
+                <button class="sidebar-menu-item" onclick="openDrawer('counter')">
+                    <span class="icon">⏱️</span>
+                    <span class="label">计时卡片</span>
+                </button>
+                <button class="sidebar-menu-item" onclick="openDrawer('calendar')">
+                    <span class="icon">📅</span>
+                    <span class="label">日历日程</span>
+                    <span class="badge" id="scheduleBadge" style="display:none">0</span>
+                </button>
+                <button class="sidebar-menu-item" onclick="openDrawer('tips')">
+                    <span class="icon">💡</span>
+                    <span class="label">Tips 提醒</span>
+                </button>
+            </div>
+        </div>
+        <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+        <div class="mobile-drawer" id="drawerCounter">
+            <div class="drawer-header">
+                <span>⏱️ 计时卡片</span>
+                <button class="close-btn" onclick="closeDrawer()">×</button>
+            </div>
+            <div class="drawer-content">
+                <div class="mobile-counter" id="mobileCounter">
+                    <div class="mc-header" id="mobileCounterTitle" onclick="openEditModal()">努力上班第</div>
+                    <div class="mc-body">
+                        <div class="mc-days" id="mobileDaysNumber">0</div>
+                        <div class="mc-date" id="mobileStartDate">起始日：2024-01-01</div>
+                    </div>
+                    <div class="mc-actions">
+                        <button onclick="openEditModal()">✏️ 编辑</button>
+                        <button onclick="openBgModal()">️ 背景</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="mobile-drawer" id="drawerCalendar">
+            <div class="drawer-header">
+                <span>📅 日历日程</span>
+                <button class="close-btn" onclick="closeDrawer()">×</button>
+            </div>
+            <div class="drawer-content">
+                <div class="mobile-calendar">
+                    <div class="mobile-calendar-header">
+                        <button onclick="changeMonth(-1)">◀</button>
+                        <span class="month-text" id="mobileMonthYear"></span>
+                        <button onclick="changeMonth(1)">▶</button>
+                    </div>
+                    <div class="mobile-calendar-grid" id="mobileCalendarGrid"></div>
+                </div>
+            </div>
+        </div>
+        <div class="mobile-drawer" id="drawerTips">
+            <div class="drawer-header">
+                <span>💡 Tips 提醒</span>
+                <button class="close-btn" onclick="closeDrawer()">×</button>
+            </div>
+            <div class="drawer-content" style="display:flex;flex-direction:column;">
+                <div class="mobile-tips-content" id="mobileTipsContent" style="flex:1;overflow-y:auto;"></div>
+                <div class="mobile-tips-add">
+                    <input type="text" id="mobileTipInput" placeholder="输入新的提醒...">
+                    <button onclick="addTipMobile()">添加</button>
+                </div>
+            </div>
+        </div>
+        <div class="mobile-main">
+            <div class="container">
+                <div class="mobile-date-nav">
+                    <button onclick="changeDate(-1)"></button>
+                    <span class="date-text" id="mobileDateDisplay"></span>
+                    <button onclick="changeDate(1)">▶</button>
+                </div>
+                <div class="mobile-stats">
+                    <div class="mobile-stat"><div class="num" id="mobileTotalCount">0</div><div class="lbl">全部</div></div>
+                    <div class="mobile-stat"><div class="num" id="mobileCompletedCount" style="color:var(--success)">0</div><div class="lbl">已完成</div></div>
+                    <div class="mobile-stat"><div class="num" id="mobilePendingCount" style="color:#f59e0b">0</div><div class="lbl">待完成</div></div>
+                </div>
+                <div class="mobile-task-input" id="mobileInputSection">
+                    <textarea id="mobileTaskInput" placeholder="输入任务，每行一个..."></textarea>
+                    <button class="add-btn" onclick="addTasksMobile()">添加任务</button>
+                </div>
+                <div id="mobileTaskList"></div>
+            </div>
+        </div>
+    </div>
+    <div class="schedule-modal" id="scheduleModal">
+        <div class="schedule-modal-content">
+            <div class="schedule-modal-header">
+                <h3 id="scheduleModalTitle">日程安排</h3>
+                <button class="close-btn" onclick="closeScheduleModal()">×</button>
+            </div>
+            <div class="schedule-list" id="scheduleList"></div>
+            <div class="schedule-add-form">
+                <input type="time" id="scheduleTime">
+                <input type="text" id="scheduleTitle" placeholder="日程内容...">
+                <button onclick="addSchedule()">添加</button>
+            </div>
+        </div>
+    </div>
+    <div class="modal-overlay" id="editModal">
+        <div class="modal">
+            <h3>编辑计时卡片</h3>
+            <div class="form-group">
+                <label>标题</label>
+                <input type="text" id="editTitle" placeholder="例如：努力上班第">
+            </div>
+            <div class="form-group">
+                <label>起始日期</label>
+                <input type="date" id="editStartDate">
+            </div>
+            <div class="btn-group">
+                <button class="btn-secondary" onclick="closeEditModal()">取消</button>
+                <button class="btn-primary" onclick="saveCounter()">保存</button>
+            </div>
+        </div>
+    </div>
+    <div class="modal-overlay" id="bgModal">
+        <div class="modal">
+            <h3>选择背景</h3>
+            <div class="form-group">
+                <label>背景图片 URL</label>
+                <input type="text" id="bgUrl" placeholder="输入图片链接，留空使用默认">
+            </div>
+            <div class="form-group">
+                <label>或选择预设背景</label>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;margin-top:0.5rem;">
+                    <button onclick="setBg('')" style="padding:1rem;border:2px solid var(--border);border-radius:8px;background:#f3f4f6;cursor:pointer;">默认</button>
+                    <button onclick="setBg('linear-gradient(135deg, #667eea 0%, #764ba2 100%)')" style="padding:1rem;border:2px solid var(--border);border-radius:8px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);cursor:pointer;color:white;">紫色</button>
+                    <button onclick="setBg('linear-gradient(135deg, #f093fb 0%, #f5576c 100%)')" style="padding:1rem;border:2px solid var(--border);border-radius:8px;background:linear-gradient(135deg, #f093fb 0%, #f5576c 100%);cursor:pointer;color:white;">粉色</button>
+                    <button onclick="setBg('linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)')" style="padding:1rem;border:2px solid var(--border);border-radius:8px;background:linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);cursor:pointer;color:white;">蓝色</button>
+                    <button onclick="setBg('linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)')" style="padding:1rem;border:2px solid var(--border);border-radius:8px;background:linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);cursor:pointer;color:white;">绿色</button>
+                    <button onclick="setBg('linear-gradient(135deg, #fa709a 0%, #fee140 100%)')" style="padding:1rem;border:2px solid var(--border);border-radius:8px;background:linear-gradient(135deg, #fa709a 0%, #fee140 100%);cursor:pointer;color:white;">橙色</button>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn-secondary" onclick="closeBgModal()">取消</button>
+                <button class="btn-primary" onclick="saveBg()">应用</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        const STORAGE_KEY = 'daily_todo_data';
+        const TIPS_KEY = 'daily_todo_tips';
+        const COUNTER_KEY = 'daily_todo_counter';
+        const SCHEDULE_KEY = 'daily_todo_schedule';
+        function getStorage() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch { return {}; } }
+        function saveStorage(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+        function getSchedule() { try { return JSON.parse(localStorage.getItem(SCHEDULE_KEY)) || {}; } catch { return {}; } }
+        function saveSchedule(data) { localStorage.setItem(SCHEDULE_KEY, JSON.stringify(data)); }
+        function getTips() { try { return JSON.parse(localStorage.getItem(TIPS_KEY)) || []; } catch { return []; } }
+        function saveTips(data) { localStorage.setItem(TIPS_KEY, JSON.stringify(data)); }
+        function getCounter() { try { return JSON.parse(localStorage.getItem(COUNTER_KEY)) || { title: '努力上班第', startDate: '2024-01-01', bg: '' }; } catch { return { title: '努力上班第', startDate: '2024-01-01', bg: '' }; } }
+        function saveCounterData(data) { localStorage.setItem(COUNTER_KEY, JSON.stringify(data)); }
+        // 获取本地日期字符串（解决 UTC 时区问题）
+        function getLocalDateStr(date) {
+            const d = date || new Date();
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+        let currentDate = getLocalDateStr();
+        let calendarMonth = new Date();
+        function formatDate(dateStr) {
+            const d = new Date(dateStr);
+            const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+            return `${d.getMonth()+1}月${d.getDate()}日 星期${weekDays[d.getDay()]}`;
+        }
+        function updateDateDisplay() {
+            document.getElementById('dateDisplay').textContent = formatDate(currentDate);
+            document.getElementById('mobileDateDisplay').textContent = formatDate(currentDate);
+            document.getElementById('datePicker').value = currentDate;
+            const isToday = currentDate === getLocalDateStr();
+            document.getElementById('inputSection').style.display = isToday ? 'block' : 'none';
+            document.getElementById('mobileInputSection').style.display = isToday ? 'block' : 'none';
+        }
+        function changeDate(delta) {
+            const d = new Date(currentDate);
+            d.setDate(d.getDate() + delta);
+            currentDate = d.toISOString().split('T')[0];
+            updateDateDisplay();
+            renderTasks();
+        }
+        function selectDate(dateStr) { if (dateStr) { currentDate = dateStr; updateDateDisplay(); renderTasks(); } }
+        function goToday() { currentDate = getLocalDateStr(); updateDateDisplay(); renderTasks(); }
+        function addTasks() {
+            const input = document.getElementById('taskInput');
+            const text = input.value.trim();
+            if (!text) return;
+            const storage = getStorage();
+            if (!storage[currentDate]) storage[currentDate] = [];
+            text.split('\n').map(l => l.trim()).filter(l => l).forEach(line => {
+                let title = line.replace(/^[\d\s\.\-\•\*\→]+/, '').trim();
+                if (title) storage[currentDate].push({ id: Date.now() + Math.random(), title, completed: false, createdAt: new Date().toISOString() });
+            });
+            saveStorage(storage);
+            input.value = '';
+            renderTasks();
+        }
+        function addTasksMobile() {
+            const input = document.getElementById('mobileTaskInput');
+            const text = input.value.trim();
+            if (!text) return;
+            const storage = getStorage();
+            if (!storage[currentDate]) storage[currentDate] = [];
+            text.split('\n').map(l => l.trim()).filter(l => l).forEach(line => {
+                let title = line.replace(/^[\d\s\.\-\•\*\→]+/, '').trim();
+                if (title) storage[currentDate].push({ id: Date.now() + Math.random(), title, completed: false, createdAt: new Date().toISOString() });
+            });
+            saveStorage(storage);
+            input.value = '';
+            renderTasks();
+        }
+        function toggleTask(id) {
+            const storage = getStorage();
+            const tasks = storage[currentDate] || [];
+            const task = tasks.find(t => t.id === id);
+            if (task) {
+                task.completed = !task.completed;
+                task.completedAt = task.completed ? new Date().toISOString() : null;
+                saveStorage(storage);
+                renderTasks();
+            }
+        }
+        function deleteTask(id) {
+            if (!confirm('确定删除这个任务吗？')) return;
+            const storage = getStorage();
+            storage[currentDate] = (storage[currentDate] || []).filter(t => t.id !== id);
+            saveStorage(storage);
+            renderTasks();
+        }
+        function renderTasks() {
+            const storage = getStorage();
+            const tasks = storage[currentDate] || [];
+            const list = document.getElementById('taskList');
+            const mobileList = document.getElementById('mobileTaskList');
+            if (tasks.length === 0) {
+                const empty = '<div class="empty-state"><div class="icon">📝</div><div class="text">今天还没有任务，添加一个吧！</div></div>';
+                list.innerHTML = empty;
+                mobileList.innerHTML = '';
+                updateStats(0, 0);
+                return;
+            }
+            const html = tasks.map(task => `
+                <div class="task-item ${task.completed ? 'completed' : ''}">
+                    <div class="task-checkbox" onclick="toggleTask(${task.id})"></div>
+                    <div class="task-text">${escapeHtml(task.title)}</div>
+                    <button class="task-delete" onclick="deleteTask(${task.id})">×</button>
+                </div>
+            `).join('');
+            const mobileHtml = tasks.map(task => `
+                <div class="mobile-task-item ${task.completed ? 'completed' : ''}">
+                    <div class="mobile-task-checkbox" onclick="toggleTask(${task.id})"></div>
+                    <div class="mobile-task-text">${escapeHtml(task.title)}</div>
+                    <button class="mobile-task-delete" onclick="deleteTask(${task.id})">×</button>
+                </div>
+            `).join('');
+            list.innerHTML = html;
+            mobileList.innerHTML = mobileHtml;
+            const completed = tasks.filter(t => t.completed).length;
+            updateStats(tasks.length, completed);
+        }
+        function updateStats(total, completed) {
+            document.getElementById('totalCount').textContent = total;
+            document.getElementById('completedCount').textContent = completed;
+            document.getElementById('pendingCount').textContent = total - completed;
+            document.getElementById('mobileTotalCount').textContent = total;
+            document.getElementById('mobileCompletedCount').textContent = completed;
+            document.getElementById('mobilePendingCount').textContent = total - completed;
+            const pct = total > 0 ? Math.round(completed / total * 100) : 0;
+            document.getElementById('progressText').textContent = pct + '%';
+            document.getElementById('progressFill').style.width = pct + '%';
+        }
+        function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
+        function renderCalendar() {
+            const year = calendarMonth.getFullYear();
+            const month = calendarMonth.getMonth();
+            document.getElementById('monthYear').textContent = `${year}年${month + 1}月`;
+            document.getElementById('mobileMonthYear').textContent = `${year}年${month + 1}月`;
+            const grid = document.getElementById('calendarGrid');
+            const mobileGrid = document.getElementById('mobileCalendarGrid');
+            const schedule = getSchedule();
+            const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+            let html = weekdays.map(w => `<div class="calendar-weekday">${w}</div>`).join('');
+            let mobileHtml = weekdays.map(w => `<div class="calendar-weekday">${w}</div>`).join('');
+            const firstDay = new Date(year, month, 1);
+            const startDate = new Date(firstDay);
+            startDate.setDate(startDate.getDate() - firstDay.getDay());
+            const today = getLocalDateStr();
+            const selected = currentDate;
+            const current = new Date(startDate);
+            for (let i = 0; i < 42; i++) {
+                const dateStr = getLocalDateStr(current);
+                const isOtherMonth = current.getMonth() !== month;
+                const isToday = dateStr === today;
+                const isSelected = dateStr === selected;
+                const hasSchedule = schedule[dateStr] && schedule[dateStr].length > 0;
+                let classes = 'calendar-day';
+                if (isOtherMonth) classes += ' other-month';
+                if (isToday) classes += ' today';
+                if (isSelected && !isToday) classes += ' selected';
+                if (hasSchedule) classes += ' has-schedule';
+                html += `<div class="${classes}" onclick="selectCalendarDate('${dateStr}')">${current.getDate()}</div>`;
+                let mClasses = 'mobile-calendar-day';
+                if (isOtherMonth) mClasses += ' other-month';
+                if (isToday) mClasses += ' today';
+                if (hasSchedule) mClasses += ' has-schedule';
+                mobileHtml += `<div class="${mClasses}" onclick="selectCalendarDate('${dateStr}')">${current.getDate()}</div>`;
+                current.setDate(current.getDate() + 1);
+            }
+            grid.innerHTML = html;
+            mobileGrid.innerHTML = mobileHtml;
+            const todaySchedule = schedule[today];
+            const badge = document.getElementById('scheduleBadge');
+            if (todaySchedule && todaySchedule.length > 0) {
+                badge.textContent = todaySchedule.length;
+                badge.style.display = 'block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+        function changeMonth(delta) { calendarMonth.setMonth(calendarMonth.getMonth() + delta); renderCalendar(); }
+        function selectCalendarDate(dateStr) {
+            currentDate = dateStr;
+            updateDateDisplay();
+            renderTasks();
+            renderCalendar();
+            openScheduleModal(dateStr);
+        }
+        let currentScheduleDate = null;
+        function openScheduleModal(dateStr) {
+            currentScheduleDate = dateStr;
+            document.getElementById('scheduleModalTitle').textContent = `${dateStr} 日程安排`;
+            renderScheduleList();
+            document.getElementById('scheduleModal').classList.add('active');
+        }
+        function closeScheduleModal() {
+            document.getElementById('scheduleModal').classList.remove('active');
+            currentScheduleDate = null;
+            renderCalendar();
+        }
+        function addSchedule() {
+            const time = document.getElementById('scheduleTime').value;
+            const title = document.getElementById('scheduleTitle').value.trim();
+            if (!time || !title) { alert('请填写时间和内容'); return; }
+            const schedule = getSchedule();
+            if (!schedule[currentScheduleDate]) schedule[currentScheduleDate] = [];
+            schedule[currentScheduleDate].push({ id: Date.now(), time, title });
+            schedule[currentScheduleDate].sort((a, b) => a.time.localeCompare(b.time));
+            saveSchedule(schedule);
+            document.getElementById('scheduleTime').value = '';
+            document.getElementById('scheduleTitle').value = '';
+            renderScheduleList();
+            renderCalendar();
+            scheduleNotification(currentScheduleDate, time, title);
+        }
+        function deleteSchedule(id) {
+            const schedule = getSchedule();
+            schedule[currentScheduleDate] = (schedule[currentScheduleDate] || []).filter(s => s.id !== id);
+            saveSchedule(schedule);
+            renderScheduleList();
+            renderCalendar();
+        }
+        function renderScheduleList() {
+            const schedule = getSchedule();
+            const items = schedule[currentScheduleDate] || [];
+            const list = document.getElementById('scheduleList');
+            if (items.length === 0) { list.innerHTML = '<div class="schedule-empty">当日暂无日程安排</div>'; return; }
+            list.innerHTML = items.map(item => `
+                <div class="schedule-item">
+                    <div class="time">${item.time}</div>
+                    <div class="title">${escapeHtml(item.title)}</div>
+                    <button class="delete-btn" onclick="deleteSchedule(${item.id})">×</button>
+                </div>
+            `).join('');
+        }
+        function requestNotification() {
+            if ('Notification' in window) {
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        alert('通知权限已开启！日程提醒将在手机通知栏显示。');
+                        checkUpcomingSchedules();
+                    } else {
+                        alert('通知权限被拒绝，无法接收日程提醒。');
+                    }
+                });
+            } else {
+                alert('您的浏览器不支持通知功能。');
+            }
+        }
+        function scheduleNotification(date, time, title) {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                const now = new Date();
+                const scheduleDateTime = new Date(`${date}T${time}`);
+                const diff = scheduleDateTime.getTime() - now.getTime();
+                if (diff > 0 && diff < 86400000) {
+                    setTimeout(() => {
+                        new Notification('📅 日程提醒', {
+                            body: `${time} - ${title}`,
+                            icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📅</text></svg>'
+                        });
+                    }, diff);
+                }
+            }
+        }
+        function checkUpcomingSchedules() {
+            const schedule = getSchedule();
+            const today = getLocalDateStr();
+            const todaySchedule = schedule[today] || [];
+            const now = new Date();
+            todaySchedule.forEach(item => {
+                const itemTime = new Date(`${today}T${item.time}`);
+                const diff = itemTime.getTime() - now.getTime();
+                if (diff > 0 && diff < 86400000) {
+                    setTimeout(() => {
+                        new Notification('📅 日程提醒', {
+                            body: `${item.time} - ${item.title}`,
+                            icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">📅</text></svg>'
+                        });
+                    }, diff);
+                }
+            });
+        }
+        function toggleSidebar() {
+            document.getElementById('mobileSidebar').classList.toggle('open');
+            document.getElementById('sidebarOverlay').classList.toggle('show');
+        }
+        function openDrawer(type) {
+            toggleSidebar();
+            closeDrawer();
+            setTimeout(() => {
+                document.getElementById(`drawer${type.charAt(0).toUpperCase() + type.slice(1)}`).classList.add('open');
+                document.getElementById('drawerOverlay').classList.add('show');
+                if (type === 'counter') updateCounter();
+                if (type === 'calendar') renderCalendar();
+                if (type === 'tips') renderTipsMobile();
+            }, 300);
+        }
+        function closeDrawer() {
+            document.querySelectorAll('.mobile-drawer').forEach(d => d.classList.remove('open'));
+            document.getElementById('drawerOverlay').classList.remove('show');
+        }
+        function updateCounter() {
+            const counter = getCounter();
+            const start = new Date(counter.startDate);
+            const now = new Date();
+            const days = Math.floor((now - start) / (1000 * 60 * 60 * 24));
+            document.getElementById('counterTitle').textContent = counter.title;
+            document.getElementById('daysNumber').textContent = days;
+            document.getElementById('startDate').textContent = `起始日：${counter.startDate}`;
+            document.getElementById('mobileCounterTitle').textContent = counter.title;
+            document.getElementById('mobileDaysNumber').textContent = days;
+            document.getElementById('mobileStartDate').textContent = `起始日：${counter.startDate}`;
+            if (counter.bg) {
+                document.getElementById('counterCard').style.background = counter.bg;
+                document.getElementById('mobileCounter').style.background = counter.bg;
+            }
+        }
+        function openEditModal() {
+            const counter = getCounter();
+            document.getElementById('editTitle').value = counter.title;
+            document.getElementById('editStartDate').value = counter.startDate;
+            document.getElementById('editModal').classList.add('active');
+        }
+        function closeEditModal() { document.getElementById('editModal').classList.remove('active'); }
+        function saveCounter() {
+            const title = document.getElementById('editTitle').value.trim() || '努力上班第';
+            const startDate = document.getElementById('editStartDate').value;
+            if (!startDate) { alert('请选择起始日期'); return; }
+            const counter = getCounter();
+            counter.title = title;
+            counter.startDate = startDate;
+            saveCounterData(counter);
+            closeEditModal();
+            updateCounter();
+        }
+        function openBgModal() {
+            const counter = getCounter();
+            document.getElementById('bgUrl').value = counter.bg || '';
+            document.getElementById('bgModal').classList.add('active');
+        }
+        function closeBgModal() { document.getElementById('bgModal').classList.remove('active'); }
+        function setBg(bg) { document.getElementById('bgUrl').value = bg; }
+        function saveBg() {
+            const bg = document.getElementById('bgUrl').value.trim();
+            const counter = getCounter();
+            counter.bg = bg;
+            saveCounterData(counter);
+            closeBgModal();
+            updateCounter();
+        }
+        function renderTips() {
+            const tips = getTips();
+            const content = document.getElementById('tipsContent');
+            if (tips.length === 0) { content.innerHTML = '<div class="tips-empty">暂无提醒，添加一个吧！</div>'; return; }
+            content.innerHTML = tips.map((tip, i) => `
+                <div class="tip-item">
+                    ${escapeHtml(tip)}
+                    <button class="tip-delete" onclick="deleteTip(${i})">×</button>
+                </div>
+            `).join('');
+        }
+        function renderTipsMobile() {
+            const tips = getTips();
+            const content = document.getElementById('mobileTipsContent');
+            if (tips.length === 0) { content.innerHTML = '<div class="tips-empty">暂无提醒，添加一个吧！</div>'; return; }
+            content.innerHTML = tips.map((tip, i) => `
+                <div class="mobile-tip-item">
+                    ${escapeHtml(tip)}
+                    <button class="tip-delete" onclick="deleteTip(${i})">×</button>
+                </div>
+            `).join('');
+        }
+        function addTip() {
+            const input = document.getElementById('tipInput');
+            const text = input.value.trim();
+            if (!text) return;
+            const tips = getTips();
+            tips.push(text);
+            saveTips(tips);
+            input.value = '';
+            renderTips();
+        }
+        function addTipMobile() {
+            const input = document.getElementById('mobileTipInput');
+            const text = input.value.trim();
+            if (!text) return;
+            const tips = getTips();
+            tips.push(text);
+            saveTips(tips);
+            input.value = '';
+            renderTipsMobile();
+        }
+        function deleteTip(index) {
+            const tips = getTips();
+            tips.splice(index, 1);
+            saveTips(tips);
+            renderTips();
+            renderTipsMobile();
+        }
+        function clearAllTips() {
+            if (!confirm('确定清空所有 Tips 吗？')) return;
+            saveTips([]);
+            renderTips();
+            renderTipsMobile();
+        }
+        document.getElementById('scheduleModal').addEventListener('click', function(e) {
+            if (e.target === this) closeScheduleModal();
+        });
+        document.getElementById('editModal').addEventListener('click', function(e) {
+            if (e.target === this) closeEditModal();
+        });
+        document.getElementById('bgModal').addEventListener('click', function(e) {
+            if (e.target === this) closeBgModal();
+        });
+        document.getElementById('tipInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') addTip();
+        });
+        document.getElementById('mobileTipInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') addTipMobile();
+        });
+        document.getElementById('scheduleTitle').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') addSchedule();
+        });
+        updateDateDisplay();
+        renderTasks();
+        renderCalendar();
+        renderTips();
+        updateCounter();
+        if ('Notification' in window && Notification.permission === 'granted') {
+            checkUpcomingSchedules();
+        }
+        
+        // PWA Service Worker 注册
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('SW registered:', reg.scope))
+                    .catch(err => console.log('SW registration failed:', err));
+            });
+        }
+        
+        // PWA 安装提示
+        let deferredPrompt;
+        const installBanner = document.createElement('div');
+        installBanner.id = 'install-banner';
+        installBanner.innerHTML = `
+            <div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#8b5cf6;color:white;padding:12px 24px;border-radius:30px;box-shadow:0 4px 12px rgba(139,92,246,0.4);z-index:10000;display:flex;align-items:center;gap:12px;cursor:pointer;animation:slideUp 0.3s ease;">
+                <span style="font-size:1.1rem;">📱 添加到主屏幕</span>
+                <button onclick="this.parentElement.style.display='none'" style="background:none;border:none;color:white;font-size:1.2rem;cursor:pointer;padding:0 4px;">×</button>
+            </div>
+            <style>@keyframes slideUp{from{transform:translate(-50%,100px);opacity:0}to{transform:translate(-50%,0);opacity:1}}</style>
+        `;
+        
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            document.body.appendChild(installBanner);
+            installBanner.querySelector('div').addEventListener('click', async () => {
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    await deferredPrompt.userChoice;
+                    deferredPrompt = null;
+                    installBanner.style.display = 'none';
+                }
+            });
+            setTimeout(() => { if (installBanner.parentElement) installBanner.style.display = 'none'; }, 10000);
+        });
+    </script>
+</body>
+</html>
